@@ -23,7 +23,7 @@ jobs:
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
       CCACHE_BASEDIR: "${{ github.workspace }}"
-    if: ${{ !startsWith(github.event.head_commit.message, '[skip ci]') && success() && github.ref == 'refs/heads/main' }}
+    if: ${{ !startsWith(github.event.head_commit.message, '[skip ci]') }} && success() && github.ref == 'refs/heads/main' }}
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -44,7 +44,6 @@ jobs:
         with:
           java-version: '17'
           distribution: 'adopt'
-          
       - name: Setup SDK
         run: |
           echo "ANDROID_HOME=${ANDROID_HOME}"
@@ -54,7 +53,6 @@ jobs:
           echo -n 24333f8a63b6825ea9c5514f83c2829b004d1fee > "$ANDROID_HOME/licenses/android-sdk-license"
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.31.0"
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
-          
       - name: Install ccache
         run: |
           sudo apt install -y ccache ninja-build
@@ -63,7 +61,6 @@ jobs:
           ccache -o hard_link=true
           ccache -o compiler_check='%compiler% -dumpmachine; %compiler% -dumpversion'
           ccache -zp
-          
       - name: Cache Native Build
         uses: actions/cache@v4.3.0
         with:
@@ -83,33 +80,16 @@ jobs:
           echo 'org.gradle.vfs.watch=true' >> gradle.properties
           echo 'qauxv.override.ninja.path=/usr/bin/ninja' >> local.properties
           sed -i 's/org.gradle.configuration-cache=true//g' gradle.properties
-          
-          # 绕过有问题的 synthesizeDistReleaseApksCI 任务
+          # TODO: 2025-08-20 find an alternative to removeUnusedEntriesAfterDays = 1 for Gradle 9.0+
+          # echo 'buildCache { local { removeUnusedEntriesAfterDays = 1 } }' >> settings.gradle.kts
           echo ${{ secrets.SIGN_KEYSTORE_BASE64 }} | base64 -d > keystore.jks
-          ./gradlew :app:assembleRelease :app:extractReleaseNativeDebugMetadata
-          
-          # 创建 CI 输出目录
-          mkdir -p app/build/outputs/ci
-          
-          # 手动复制 APK 文件到预期位置
-          find app/build/outputs/apk/release -name "*.apk" -exec cp {} app/build/outputs/ci/ \;
-          
-          # 设置环境变量
-          echo "APK_FILE_ARM32=$(find app/build/outputs/apk/release -name '*armeabi-v7a*.apk' | head -1)" >> $GITHUB_ENV
-          echo "APK_FILE_ARM64=$(find app/build/outputs/apk/release -name '*arm64-v8a*.apk' | head -1)" >> $GITHUB_ENV
-          echo "APK_FILE_UNIVERSAL=$(find app/build/outputs/apk/release -name '*universal*.apk' | head -1)" >> $GITHUB_ENV
+          ./gradlew :app:synthesizeDistReleaseApksCI :app:extractReleaseNativeDebugMetadata
+          ccache -s
+          echo "APK_FILE_ARM32=$(find app/build/outputs/ci -name '*arm32.apk')" >> $GITHUB_ENV
+          echo "APK_FILE_ARM64=$(find app/build/outputs/ci -name '*arm64.apk')" >> $GITHUB_ENV
+          echo "APK_FILE_ARMALL=$(find app/build/outputs/ci -name '*armAll.apk')" >> $GITHUB_ENV
+          echo "APK_FILE_UNIVERSAL=$(find app/build/outputs/ci -name '*universal.apk')" >> $GITHUB_ENV
           echo "SYMBOL_FILE=app/build/intermediates/native_debug_metadata/release/extractReleaseNativeDebugMetadata/out" >> $GITHUB_ENV
-          
-          # 如果找不到特定 ABI 的 APK，使用通用的
-          if [ -z "$APK_FILE_ARM32" ] || [ ! -f "$APK_FILE_ARM32" ]; then
-            echo "APK_FILE_ARM32=$(find app/build/outputs/apk/release -name '*.apk' | head -1)" >> $GITHUB_ENV
-          fi
-          if [ -z "$APK_FILE_ARM64" ] || [ ! -f "$APK_FILE_ARM64" ]; then
-            echo "APK_FILE_ARM64=$(find app/build/outputs/apk/release -name '*.apk' | head -1)" >> $GITHUB_ENV
-          fi
-          if [ -z "$APK_FILE_UNIVERSAL" ] || [ ! -f "$APK_FILE_UNIVERSAL" ]; then
-            echo "APK_FILE_UNIVERSAL=$(find app/build/outputs/apk/release -name '*.apk' | head -1)" >> $GITHUB_ENV
-          fi
         env:
           KEYSTORE_PATH: "../keystore.jks"
           KEYSTORE_PASSWORD: ${{ secrets.SIGN_KEYSTORE_PASSWORD }}
@@ -122,53 +102,37 @@ jobs:
           echo "### Build Success :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "|ABI|SHA256|" >> $GITHUB_STEP_SUMMARY
           echo "|:--------:|:----------|" >> $GITHUB_STEP_SUMMARY
-          
-          # 检查文件是否存在再计算 SHA256
-          if [ -f "${{ env.APK_FILE_ARM32 }}" ]; then
-            arm32=($(sha256sum ${{ env.APK_FILE_ARM32 }}))
-            echo "|arm32|$arm32" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "|arm32|File not found" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f "${{ env.APK_FILE_ARM64 }}" ]; then
-            arm64=($(sha256sum ${{ env.APK_FILE_ARM64 }}))
-            echo "|arm64|$arm64" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "|arm64|File not found" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f "${{ env.APK_FILE_UNIVERSAL }}" ]; then
-            universal=($(sha256sum ${{ env.APK_FILE_UNIVERSAL }}))
-            echo "|universal|$universal" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "|universal|File not found" >> $GITHUB_STEP_SUMMARY
-          fi
+          arm32=($(sha256sum ${{ env.APK_FILE_ARM32 }}))
+          echo "|arm32|$arm32" >> $GITHUB_STEP_SUMMARY
+          arm64=($(sha256sum ${{ env.APK_FILE_ARM64 }}))
+          echo "|arm64|$arm64" >> $GITHUB_STEP_SUMMARY
+          armAll=($(sha256sum ${{ env.APK_FILE_ARMALL }}))
+          echo "|armAll|$armAll" >> $GITHUB_STEP_SUMMARY
+          universal=($(sha256sum ${{ env.APK_FILE_UNIVERSAL }}))
+          echo "|universal|$universal" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Artifacts(arm32)
         uses: actions/upload-artifact@v4
         with:
           path: ${{ env.APK_FILE_ARM32 }}
           name: QAuxiliary-release-${{ github.event.head_commit.id }}-arm32
-        if: ${{ env.APK_FILE_ARM32 != '' && env.APK_FILE_ARM32 != '/' }}
-          
       - name: Upload Artifacts(arm64)
         uses: actions/upload-artifact@v4
         with:
           path: ${{ env.APK_FILE_ARM64 }}
           name: QAuxiliary-release-${{ github.event.head_commit.id }}-arm64
-        if: ${{ env.APK_FILE_ARM64 != '' && env.APK_FILE_ARM64 != '/' }}
-          
+      - name: Upload Artifacts(armAll)
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ env.APK_FILE_ARMALL }}
+          name: QAuxiliary-release-${{ github.event.head_commit.id }}-armAll
       - name: Upload Artifacts(universal)
         uses: actions/upload-artifact@v4
         with:
           path: ${{ env.APK_FILE_UNIVERSAL }}
           name: QAuxiliary-release-${{ github.event.head_commit.id }}-universal
-        if: ${{ env.APK_FILE_UNIVERSAL != '' && env.APK_FILE_UNIVERSAL != '/' }}
-          
       - name: Upload Artifacts(symbol)
         uses: actions/upload-artifact@v4
         with:
           path: ${{ env.SYMBOL_FILE }}
           name: QAuxiliary-release-${{ github.event.head_commit.id }}-symbol
-        if: ${{ env.SYMBOL_FILE != '' && env.SYMBOL_FILE != '/' }}
