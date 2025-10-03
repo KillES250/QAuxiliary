@@ -726,7 +726,7 @@ data object AIO_Destroy_QQNT : DexKitTarget.UsingStringVector() {
     override val declaringClass = "AIO_Create_QQNT"
     override val filter = DexKitFilter.strInClsName("Lcom/tencent/aio/base/chat/ChatPie;", true)
 }
-// 这一行只为了触发actions（懒
+
 data object AIO_InputRootInit_QQNT : DexKitTarget.UsingStringVector() {
     override val findMethod: Boolean = true
     override val traitStringVectors = arrayOf(
@@ -734,8 +734,11 @@ data object AIO_InputRootInit_QQNT : DexKitTarget.UsingStringVector() {
         arrayOf("inputRoot", "findViewById(...)", "getContext(...)")
     )
     override val declaringClass = "com.tencent.mobileqq.aio.input.adorn.b"
+    override val methodName = "c"  // 明确指定方法名
+    override val methodDescriptor = "(Lcom/tencent/mobileqq/aio/input/inputbar/viewbinding/a;)V"  // 方法签名
     override val filter = DexKitFilter.strInClsName("com/tencent/mobileqq/aio/input")
 }
+
 
 data object EmoMsgUtils_isSingleLottie_QQNT : DexKitTarget.UsingStr() {
     override val findMethod: Boolean = true
