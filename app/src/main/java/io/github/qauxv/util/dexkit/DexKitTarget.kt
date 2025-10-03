@@ -726,7 +726,7 @@ data object AIO_Destroy_QQNT : DexKitTarget.UsingStringVector() {
     override val declaringClass = "AIO_Create_QQNT"
     override val filter = DexKitFilter.strInClsName("Lcom/tencent/aio/base/chat/ChatPie;", true)
 }
-
+// 这一行只为了触发actions（懒
 data object AIO_InputRootInit_QQNT : DexKitTarget.UsingStringVector() {
     override val findMethod: Boolean = true
     override val traitStringVectors = arrayOf(
