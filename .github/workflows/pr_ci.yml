@@ -44,6 +44,7 @@ jobs:
           java-version: '17'
           distribution: 'adopt'
           cache: gradle
+          
       - name: Install ccache
         run: |
           sudo apt install -y ccache ninja-build
@@ -52,6 +53,7 @@ jobs:
           ccache -o hard_link=true
           ccache -o compiler_check='%compiler% -dumpmachine; %compiler% -dumpversion'
           ccache -zp
+          
       - name: Cache Native Build
         uses: actions/cache@v4.3.0
         with:
@@ -85,3 +87,40 @@ jobs:
           ccache -s
         env:
           QAUXV_OVERRIDE_CMAKE_VERSION: "3.31.0"
+
+      - name: Find APK File
+        id: find-apk
+        run: |
+          APK_FILE=$(find app/build/outputs -name "*.apk" | head -1)
+          echo "apk_file=$APK_FILE" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_FILE"
+
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QAuxiliary-PR-${{ github.event.pull_request.number || 'debug' }}-${{ github.sha }}
+          path: ${{ steps.find-apk.outputs.apk_file }}
+          if-no-files-found: warn
+
+      - name: Create Release (if triggered manually)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pr-${{ github.event.pull_request.number || 'debug' }}-${{ github.sha }}
+          name: PR Check Build - ${{ github.event.pull_request.title || 'Debug Build' }}
+          draft: false
+          prerelease: true
+          files: ${{ steps.find-apk.outputs.apk_file }}
+          body: |
+            ## PR Check Build
+            
+            Built from commit: ${{ github.sha }}
+            Branch: ${{ github.ref }}
+            
+            ${{ github.event.pull_request.body || 'No PR description' }}
+            
+            ### Build Info
+            - Build triggered by: ${{ github.actor }}
+            - Workflow: ${{ github.workflow }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
