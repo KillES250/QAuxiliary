@@ -431,7 +431,8 @@ val synthesizeDistReleaseApksCI by tasks.registering {
     val outputAbiVariants = mapOf(
         "arm32" to arrayOf("armeabi-v7a"),
         "arm64" to arrayOf("arm64-v8a"),
-        "armAll" to arrayOf("armeabi-v7a", "arm64-v8a")
+        "armAll" to arrayOf("armeabi-v7a", "arm64-v8a"),
+        "universal" to arrayOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
     )
     val versionName = android.defaultConfig.versionName
     val outputDir = File(project.buildDir, "outputs" + File.separator + "ci")
@@ -446,7 +447,7 @@ val synthesizeDistReleaseApksCI by tasks.registering {
         if (signConfig == null) {
             logger.error("Task :app:synthesizeDistReleaseApksCI: No release signing config found, skip signing")
         }
-        val requiredAbiList = listOf("armeabi-v7a", "arm64-v8a")  // 移除 x86 和 x86_64
+        val requiredAbiList = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         outputDir.mkdir()
         val options = ZFileOptions().apply {
             alignmentRule = object : AlignmentRule {
